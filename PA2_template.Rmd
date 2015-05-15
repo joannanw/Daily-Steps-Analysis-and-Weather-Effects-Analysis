@@ -1,0 +1,105 @@
+---
+title: "Health & Economic Effects of Weather"
+author: "joannanw"
+date: "Saturday, February 21, 2015"
+output:
+html_document:
+keep_md: true
+---
+
+## Introduction
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+The basic goal of this assignment is to explore the NOAA Storm Database and answer some basic questions about severe weather events. This document covers the data processing and outlines reasoning for the results.
+
+## Data Processing
+
+```{r}
+url <- "http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+filename <- basename(url)
+if(!file.exists(filename))
+  {
+    download.file(url, filename, mode = "wb")
+  }
+data <- read.csv(bzfile(filename))
+```
+
+# Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+# Across the United States, which types of events have the greatest economic consequences?
+```{r}
+library(knitr)
+library(ggplot2)
+library(data.table)
+```
+
+```{r}
+# Change to data table for easier processing
+data <- data.table(data)
+# Change names to lower case
+old <- names(data)
+newName <- tolower(old)
+setnames(data, old, newName)
+# Get number of event types
+length(unique(data$evtype))
+# Add year column
+data<-data[, year:=format(as.Date(data$bgn_date, "%m/%d/%Y"), "%Y")]
+data[order(year),.N,year]
+# Table of observations by year shows that number of observations increased around 1994
+```
+
+The data has a total of 985 unique event types (evtype). 
+Some event was recorded from 1950, while others were recorded later on.
+
+Due to the large numbers of event types and variation in record time, the data will be processed in 3 ways:
+
+1. Only data from year 1994 onward will be included.
+2. Property damage and crop damage will be computed to comparable numeric format. Any inflation is ignored to represent nominal damage amount.
+3. Only event types with fatalities, injuries, property damage and crop damage greater than its mean will be plotted for each respective analysis.
+
+```{r}
+newData <- data[year >= 1994]
+```
+
+The property damage and crop damage values have to be transformed into comparable numerical form based on the appropriate multipliers. A multiplier where Hundred 
+(H), Thousand (K), Million (M), Billion (B).
+
+```{r}
+# Compute property damage
+newData <- newData[, propertyDamage:= ifelse(propdmgexp == "H", propdmg*100, ifelse(propdmgexp == "K", propdmg*1000, ifelse(propdmgexp == "M", propdmg * 1e+06, ifelse(propdmgexp == "B", propdmg * 1e+09, propdmg))))]
+# Compute crop damage
+newData <- newData[, cropDamage:= ifelse(cropdmgexp == "H", cropdmg*100, ifelse(cropdmgexp == "K", cropdmg*1000, ifelse(cropdmgexp == "M", cropdmg * 1e+06, ifelse(cropdmgexp == "B", cropdmg * 1e+09, cropdmg))))]
+# Select relevant columns and order by year
+newData <- newData[order(year),.(year, evtype, fatalities, injuries, propertyDamage, cropDamage)]
+```
+
+## Results
+
+Now let's look at the event types that are the most harmful to the population. To do this, fatalities and injuries will be separated as these values represent different degree of harmfulness. Each analysis will ignore any value that is equal to zero. For a clearer plot, only event types with fatalities or injuries greater than the mean is shown.
+
+```{r}
+fatalityData <- newData[fatalities > 0,.(evtype, fatalities)]
+aggFatalityData <- fatalityData[,.(fatality.Sum = sum(fatalities)), by = evtype][order(-fatality.Sum)]
+aggFatalityData <- aggFatalityData[fatality.Sum > mean(fatality.Sum)]
+ggplot(aggFatalityData, aes(reorder(evtype, fatality.Sum), fatality.Sum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 60, hjust = 1)) + labs(x = "Type of Severe Weather Event") + labs(y = "Sum of Fatalities") + labs(title = "Most Fatal Event Types")
+```
+
+```{r}
+injuriesData <- newData[injuries > 0, .(evtype, injuries)]
+aggInjuriesData <- injuriesData[,.(injuries.sum = sum(injuries)), by = evtype][order(-injuries.sum)]
+aggInjuriesData <- aggInjuriesData[injuries.sum > mean(injuries.sum)]
+ggplot(aggInjuriesData, aes(reorder(evtype, injuries.sum), injuries.sum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 60, hjust = 1)) + labs(x = "Type of Severe Weather Event") + labs(y = "Sum of Injuries") + labs(title = "Most Injury-prone Event Types")
+```
+
+Now let's look at the event types that have the greatest economic consequences. For this analysis, both property and crop damages will be summed up. No inflation is taken into account to represent nominal value. Only values greater than the mean is plotted.
+
+```{r}
+costData <- newData[propertyDamage > 0 & cropDamage > 0, .(evtype, propertyDamage, cropDamage)]
+aggCostData <- costData[,.(cost.sum = sum(propertyDamage, cropDamage)), by = evtype][order(-cost.sum)]
+aggCostData <- aggCostData[cost.sum > mean(cost.sum)]
+ggplot(aggCostData, aes(reorder(evtype, cost.sum), cost.sum)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 60, hjust = 1)) + labs(x = "Type of Severe Weather Event") + labs(y = "Total Cost of Damage") + labs(title = "Most Costly Event Types")
+```
+
+As a conclusion, excessive heat is the most fatal, tornado causes the most injuries, and flood causes the most damage.
+
+

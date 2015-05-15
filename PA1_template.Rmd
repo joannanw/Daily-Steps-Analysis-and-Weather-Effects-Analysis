@@ -1,0 +1,74 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+html_document:
+keep_md: true
+---
+## By Joanna Widjaja, 15 Feb 2015 
+
+## Loading and preprocessing the data
+```{r}
+unzip("activity.zip")
+activity <- read.csv("activity.csv")
+```
+
+## What is mean total number of steps taken per day?
+```{r}
+aggActivityDate <- aggregate(steps ~ date, data = activity, FUN = sum)
+hist(aggActivityDate$steps, main = "Total Number of Steps", xlab = "Total Number of Steps by Day")
+```
+
+Below is the mean and median of the total number of steps taken per day:
+```{r}
+mean(aggActivityDate$steps)
+median(aggActivityDate$steps)
+```
+
+## What is the average daily activity pattern?
+```{r}
+aggActivityInt <- aggregate(steps ~ interval, data = activity, FUN = mean, na.rm = TRUE)
+library(ggplot2)
+ggplot(aggActivityInt, aes(interval, steps)) + geom_line(colour="#BB0000") + labs(title="Mean of Steps by Interval")
+```
+
+Below is the interval that has the maximum mean number of steps:
+```{r}
+aggActivityInt[aggActivityInt$steps == max(aggActivityInt$steps), 1]
+```
+
+## Inputing missing values
+Below is the number of missing rows:
+```{r}
+sum(is.na(activity$steps))
+```
+
+Below is the new dataset with missing values replaced:
+```{r}
+library(plyr)
+newActivity <- join(activity, aggActivityInt, by = 'interval')
+newActivity[is.na(newActivity$steps),1] <- newActivity[is.na(newActivity$steps),4]
+newActivity <- newActivity[,c(1,2,3)]
+head(newActivity)
+```
+
+Graph new histogram.
+```{r}
+aggNewActivity <- aggregate(steps ~ date, data = newActivity, FUN = sum)
+hist(aggNewActivity$steps, main = "Total Number of Steps", xlab = "Total Number of Steps by Day")
+```
+
+Calculate mean and median.
+```{r}
+mean(aggNewActivity$steps)
+median(aggNewActivity$steps)
+```
+
+## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+newActivity$wday <- ifelse(0 < as.POSIXlt(newActivity$date)$wday & as.POSIXlt(newActivity$date)$wday < 6, 1, 0)
+newActivity$wday <- factor(newActivity$wday, levels = c(0,1), labels = c("weekend", "weekday"))
+aggNewActivity <- aggregate(steps ~ interval + wday, data = newActivity, FUN = mean)
+library(lattice)
+xyplot(steps ~ interval | factor(wday), data = aggNewActivity, aspect = 1/2,type = "l")
+```
+
